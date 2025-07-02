@@ -20,6 +20,23 @@ export interface JobListResponse {
   limit: number
 }
 
+export interface CreateJobRequest {
+  title: string
+  company: string
+  city: string
+  state: string
+  description: string
+}
+
+export interface UpdateJobRequest {
+  title?: string
+  company?: string
+  city?: string
+  state?: string
+  description?: string
+  status?: boolean
+}
+
 export const useJobsStore = defineStore('jobs', () => {
   const jobs = ref<Job[]>([])
   const currentJob = ref<Job | null>(null)
@@ -88,6 +105,56 @@ export const useJobsStore = defineStore('jobs', () => {
     }
   }
 
+  async function createJob(jobData: CreateJobRequest) {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await axios.post('http://localhost:8080/jobs/api/v1/jobs', jobData)
+      await fetchJobs(page.value, limit.value)
+      return res.data
+    } catch (e: any) {
+      error.value = e.response?.data?.error || 'Failed to create job'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateJob(id: number, jobData: UpdateJobRequest) {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await axios.put(`http://localhost:8080/jobs/api/v1/jobs/${id}`, jobData)
+      if (currentJob.value?.id === id) {
+        currentJob.value = res.data
+      }
+      await fetchJobs(page.value, limit.value)
+      return res.data
+    } catch (e: any) {
+      error.value = e.response?.data?.error || 'Failed to update job'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function deleteJob(id: number) {
+    loading.value = true
+    error.value = null
+    try {
+      await axios.delete(`http://localhost:8080/jobs/api/v1/jobs/${id}`)
+      if (currentJob.value?.id === id) {
+        currentJob.value = null
+      }
+      await fetchJobs(page.value, limit.value)
+    } catch (e: any) {
+      error.value = e.response?.data?.error || 'Failed to delete job'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     jobs,
     currentJob,
@@ -99,5 +166,8 @@ export const useJobsStore = defineStore('jobs', () => {
     fetchJobs,
     searchJobs,
     fetchJobById,
+    createJob,
+    updateJob,
+    deleteJob,
   }
 }) 
