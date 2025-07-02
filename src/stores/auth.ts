@@ -5,6 +5,7 @@ import { ref, computed } from 'vue'
 interface UserPublic {
   id: number
   email: string
+  name: string
 }
 
 interface AuthResponse {
@@ -20,7 +21,6 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref<string | null>(null)
 
   if (token.value) {
-    // Optionally, decode token or fetch user info
   }
 
   const isAuthenticated = computed(() => !!token.value)
@@ -29,14 +29,17 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const res = await axios.post<AuthResponse>(
-        '/auth/login',
+        'http://localhost:8080/auth/login',
         { email, password },
-        { headers: { 'Content-Type': 'application/json' } }
+        { headers: { 'Content-Type': 'application/json' } },
       )
       if (res.data.token) {
         token.value = res.data.token
         user.value = res.data.user || null
         localStorage.setItem('token', res.data.token)
+        if (user.value) {
+          localStorage.setItem('user', JSON.stringify(user.value))
+        }
       } else {
         error.value = res.data.error || 'Login failed'
       }
@@ -45,18 +48,21 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(email: string, password: string) {
+  async function register(email: string, name: string, password: string) {
     error.value = null
     try {
       const res = await axios.post<AuthResponse>(
-        '/auth/register',
-        { email, password },
-        { headers: { 'Content-Type': 'application/json' } }
+        'http://localhost:8080/auth/register',
+        { email, name, password },
+        { headers: { 'Content-Type': 'application/json' } },
       )
       if (res.data.token) {
         token.value = res.data.token
         user.value = res.data.user || null
         localStorage.setItem('token', res.data.token)
+        if (user.value) {
+          localStorage.setItem('user', JSON.stringify(user.value))
+        }
       } else {
         error.value = res.data.error || 'Registration failed'
       }
@@ -69,6 +75,16 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  }
+
+  if (!user.value) {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      try {
+        user.value = JSON.parse(userStr)
+      } catch {}
+    }
   }
 
   return {
@@ -80,4 +96,4 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
   }
-}) 
+})
