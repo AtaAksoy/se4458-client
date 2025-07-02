@@ -67,8 +67,7 @@
             <!-- Main Content -->
             <div class="flex-1">
                 <div class="mb-4 flex items-center gap-2">
-                    <span class="text-lg font-semibold">{{ filteredJobs.length }} {{ searchTitle || 'Yazılım Uzmanı' }}
-                        {{ searchCity ? searchCity : '' }} iş ilanı</span>
+                    <span class="text-lg font-semibold">{{ jobsStore.total }} iş ilanı</span>
                 </div>
                 <div class="mb-2 flex flex-wrap gap-2 items-center">
                     <span v-for="filter in selectedFilters" :key="filter"
@@ -79,28 +78,26 @@
                     <Button v-if="selectedFilters.length" size="sm" variant="link" @click="clearFilters">Filtreleri
                         Temizle</Button>
                 </div>
-                <div class="space-y-4">
-                    <Card v-for="job in filteredJobs" :key="job.id">
+                <div v-if="jobsStore.loading" class="text-center py-8 text-gray-500">Yükleniyor...</div>
+                <div v-else-if="jobsStore.error" class="text-center py-8 text-red-500">{{ jobsStore.error }}</div>
+                <div v-else class="space-y-4">
+                    <Card v-for="job in filteredJobs" :key="job.id"
+                        class="cursor-pointer hover:shadow-md transition-shadow" @click="goToJobDetail(job.id)">
                         <CardHeader class="flex flex-row items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div v-if="job.logo"
-                                    class="w-12 h-12 bg-white border rounded flex items-center justify-center overflow-hidden">
-                                    <img :src="job.logo" :alt="job.company" class="max-w-full max-h-full" />
-                                </div>
                                 <div>
                                     <CardTitle>{{ job.title }}</CardTitle>
                                     <CardDescription>{{ job.company }}</CardDescription>
                                 </div>
                             </div>
-                            <div class="text-xs text-gray-500">{{ job.date }}</div>
+                            <div class="text-xs text-gray-500">{{ job.city }}</div>
                         </CardHeader>
                         <CardContent>
                             <div class="flex items-center gap-4 text-sm">
                                 <span>{{ job.city }}</span>
-                                <span v-if="job.remote" class="px-2 py-0.5 bg-gray-200 rounded text-xs">Uzaktan</span>
-                                <span v-if="job.type" class="px-2 py-0.5 bg-gray-200 rounded text-xs">{{ job.type
-                                    }}</span>
-                                <span v-if="job.district">{{ job.district }}</span>
+                                <span v-if="job.state">{{ job.state }}</span>
+                                <span class="px-2 py-0.5 bg-gray-200 rounded text-xs">{{ job.description.slice(0, 60)
+                                }}...</span>
                             </div>
                         </CardContent>
                     </Card>
@@ -111,19 +108,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select'
+import type { Job } from '@/stores/jobs'
+import { useJobsStore } from '@/stores/jobs'
 
-const searchTitle = ref('Yazılım Uzmanı')
-const searchCity = ref('İzmir')
+const router = useRouter()
+const jobsStore = useJobsStore()
+
+const searchTitle = ref('')
+const searchCity = ref('')
 
 const filters = ref({
     country: 'Türkiye',
-    city: 'İzmir',
+    city: '',
     district: '',
     workTypes: [] as string[],
 })
@@ -136,42 +139,6 @@ const districts = computed(() => {
     return []
 })
 
-const jobs = ref([
-    {
-        id: 1,
-        title: 'Yazılım Uzmanı',
-        company: 'Alfemo',
-        city: 'İzmir',
-        district: 'Bornova',
-        type: 'Tam zamanlı',
-        remote: false,
-        logo: '',
-        date: 'Bugün',
-    },
-    {
-        id: 2,
-        title: 'Canias Yazılım Uzmanı',
-        company: 'Packy Packaging',
-        city: 'İzmir',
-        district: 'Konak',
-        type: 'Tam zamanlı',
-        remote: false,
-        logo: '',
-        date: 'Bugün',
-    },
-    {
-        id: 3,
-        title: 'Frontend Developer',
-        company: 'TechSoft',
-        city: 'İstanbul',
-        district: 'Kadıköy',
-        type: 'Uzaktan / Remote',
-        remote: true,
-        logo: '',
-        date: 'Dün',
-    },
-])
-
 const selectedFilters = computed(() => {
     const arr: string[] = []
     if (filters.value.country) arr.push(filters.value.country)
@@ -183,22 +150,33 @@ const selectedFilters = computed(() => {
     return arr
 })
 
-const filteredJobs = computed(() => {
-    return jobs.value.filter(job => {
-        const matchTitle = searchTitle.value ? job.title.toLowerCase().includes(searchTitle.value.toLowerCase()) : true
-        const matchCity = filters.value.city ? job.city === filters.value.city : true
-        const matchDistrict = filters.value.district ? job.district === filters.value.district : true
-        const matchType = filters.value.workTypes.length ? filters.value.workTypes.includes(job.type) : true
-        return matchTitle && matchCity && matchDistrict && matchType
-    })
+const filteredJobs = computed<Job[]>(() => {
+    let jobs = jobsStore.jobs
+    if (filters.value.city) jobs = jobs.filter(j => j.city === filters.value.city)
+    return jobs
 })
 
+function goToJobDetail(jobId: number) {
+    router.push({ name: 'job-detail', params: { id: jobId } })
+}
+
 function onSearch() {
+    let q = searchTitle.value
+    if (searchCity.value) q += ' ' + searchCity.value
+    const query = q.trim()
+
+    if (query) {
+        jobsStore.searchJobs(query, 1, 10)
+    } else {
+        jobsStore.fetchJobs(1, 10)
+    }
     filters.value.city = searchCity.value
 }
+
 function onApplyFilters() {
-    // No-op, filters are reactive
+    onSearch()
 }
+
 function removeFilter(filter: string) {
     if (filters.value.country === filter) filters.value.country = ''
     if (filters.value.city === filter) filters.value.city = ''
@@ -206,7 +184,9 @@ function removeFilter(filter: string) {
     filters.value.workTypes = filters.value.workTypes.filter(wt => wt !== filter)
     if (searchTitle.value === filter) searchTitle.value = ''
     if (searchCity.value === filter) searchCity.value = ''
+    onSearch()
 }
+
 function clearFilters() {
     filters.value.country = 'Türkiye'
     filters.value.city = ''
@@ -214,7 +194,12 @@ function clearFilters() {
     filters.value.workTypes = []
     searchTitle.value = ''
     searchCity.value = ''
+    jobsStore.fetchJobs(1, 10)
 }
+
+onMounted(() => {
+    jobsStore.fetchJobs(1, 10)
+})
 </script>
 
 <style scoped>
